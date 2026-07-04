@@ -81,6 +81,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         webView.autoresizingMask = [.width, .height]
         window.contentView = webView
 
+        let savedZoom = UserDefaults.standard.double(forKey: "zoom")
+        if savedZoom > 0 { webView.pageZoom = savedZoom }
+
         if fileURL == nil {
             let panel = NSOpenPanel()
             panel.allowedContentTypes = [.init(filenameExtension: "md")!, .init(filenameExtension: "markdown")!]
@@ -162,6 +165,16 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     @objc func reload(_ sender: Any?) {
         render(restoreScroll: true)
     }
+
+    @objc func zoomIn(_ sender: Any?) { setZoom(webView.pageZoom + 0.1) }
+    @objc func zoomOut(_ sender: Any?) { setZoom(webView.pageZoom - 0.1) }
+    @objc func actualSize(_ sender: Any?) { setZoom(1.0) }
+
+    func setZoom(_ zoom: CGFloat) {
+        let clamped = min(max(zoom, 0.5), 3.0)
+        webView.pageZoom = clamped
+        UserDefaults.standard.set(Double(clamped), forKey: "zoom")
+    }
 }
 
 func buildMenu() -> NSMenu {
@@ -178,6 +191,14 @@ func buildMenu() -> NSMenu {
     fileItem.submenu = fileMenu
     fileMenu.addItem(withTitle: "Reload", action: #selector(AppDelegate.reload(_:)), keyEquivalent: "r")
     fileMenu.addItem(withTitle: "Close", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
+
+    let viewItem = NSMenuItem()
+    main.addItem(viewItem)
+    let viewMenu = NSMenu(title: "View")
+    viewItem.submenu = viewMenu
+    viewMenu.addItem(withTitle: "Zoom In", action: #selector(AppDelegate.zoomIn(_:)), keyEquivalent: "=")
+    viewMenu.addItem(withTitle: "Zoom Out", action: #selector(AppDelegate.zoomOut(_:)), keyEquivalent: "-")
+    viewMenu.addItem(withTitle: "Actual Size", action: #selector(AppDelegate.actualSize(_:)), keyEquivalent: "0")
 
     let editItem = NSMenuItem()
     main.addItem(editItem)
