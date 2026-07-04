@@ -26,8 +26,11 @@ This embeds `marked.min.js` (vendored, v12.0.2) into the binary and compiles wit
 ## Install
 
 ```sh
-ln -s "$(pwd)/mdreader" /usr/local/bin/mdreader
+cp -R mdreader.app /Applications/
+ln -s /Applications/mdreader.app/Contents/MacOS/mdreader /usr/local/bin/mdreader
 ```
+
+To make it the default app for `.md` files, right-click any Markdown file in Finder → Get Info → Open with: mdreader → Change All. (`build.sh` produces `mdreader.app`, a minimal bundle that registers as a Markdown viewer with Launch Services.)
 
 ## Usage
 

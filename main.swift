@@ -50,13 +50,21 @@ li + li { margin-top: .25em; }
 class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     var window: NSWindow!
     var webView: WKWebView!
-    var fileURL: URL
+    var fileURL: URL?
     var watcher: DispatchSourceFileSystemObject?
     var watchedFD: Int32 = -1
 
-    init(fileURL: URL) {
+    init(fileURL: URL?) {
         self.fileURL = fileURL
         super.init()
+    }
+
+    // Finder double-click / "Open With" — fires before didFinishLaunching at
+    // launch, or while running when another file is opened.
+    func application(_ application: NSApplication, open urls: [URL]) {
+        guard let url = urls.first else { return }
+        fileURL = url
+        if window != nil { showCurrentFile() }
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -65,7 +73,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             contentRect: frame,
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
             backing: .buffered, defer: false)
-        window.title = fileURL.lastPathComponent
         window.center()
         window.delegate = self
         window.setFrameAutosaveName("mdreader")
@@ -74,15 +81,27 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         webView.autoresizingMask = [.width, .height]
         window.contentView = webView
 
+        if fileURL == nil {
+            let panel = NSOpenPanel()
+            panel.allowedContentTypes = [.init(filenameExtension: "md")!, .init(filenameExtension: "markdown")!]
+            panel.message = "Choose a Markdown file"
+            guard panel.runModal() == .OK, let chosen = panel.url else { NSApp.terminate(nil); return }
+            fileURL = chosen
+        }
+        showCurrentFile()
+    }
+
+    func showCurrentFile() {
+        guard let url = fileURL else { return }
+        window.title = url.lastPathComponent
         render(restoreScroll: false)
         startWatching()
-
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
 
     func render(restoreScroll: Bool) {
-        guard let data = try? Data(contentsOf: fileURL) else { return }
+        guard let fileURL, let data = try? Data(contentsOf: fileURL) else { return }
         let mdBase64 = data.base64EncodedString()
         let scrollJS = restoreScroll
             ? "window.scrollTo(0, sessionStorage.getItem('y') || 0);"
@@ -105,6 +124,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     func startWatching() {
         stopWatching()
+        guard let fileURL else { return }
         watchedFD = open(fileURL.path, O_EVTONLY)
         guard watchedFD >= 0 else { return }
         let source = DispatchSource.makeFileSystemObjectSource(
@@ -170,23 +190,15 @@ func buildMenu() -> NSMenu {
 
 // --- entry point ---
 let args = CommandLine.arguments
-var url: URL
+var url: URL? = nil
 
 if args.count > 1 {
-    url = URL(fileURLWithPath: (args[1] as NSString).expandingTildeInPath)
-} else {
-    let app = NSApplication.shared
-    app.setActivationPolicy(.regular)
-    let panel = NSOpenPanel()
-    panel.allowedContentTypes = [.init(filenameExtension: "md")!, .init(filenameExtension: "markdown")!]
-    panel.message = "Choose a Markdown file"
-    guard panel.runModal() == .OK, let chosen = panel.url else { exit(0) }
-    url = chosen
-}
-
-guard FileManager.default.fileExists(atPath: url.path) else {
-    FileHandle.standardError.write("mdreader: no such file: \(url.path)\n".data(using: .utf8)!)
-    exit(1)
+    let candidate = URL(fileURLWithPath: (args[1] as NSString).expandingTildeInPath)
+    guard FileManager.default.fileExists(atPath: candidate.path) else {
+        FileHandle.standardError.write("mdreader: no such file: \(candidate.path)\n".data(using: .utf8)!)
+        exit(1)
+    }
+    url = candidate
 }
 
 let app = NSApplication.shared
